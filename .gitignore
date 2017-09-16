@@ -4,6 +4,12 @@
 #build directory
 **build/
 
+#temp src files
+*~
+
+#old read me 
+README.orig.md
+
 # Prerequisites
 *.d
 
