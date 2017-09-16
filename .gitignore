@@ -7,6 +7,9 @@
 #temp src files
 *~
 
+#Eigen-3.3 directory
+**src/Eigen-3.3/
+
 #old read me 
 README.orig.md
 
