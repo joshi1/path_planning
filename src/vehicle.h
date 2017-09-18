@@ -19,6 +19,8 @@ using namespace std;
 #define HIGH_COST           999
 #define INVALID_COST        9999
 
+//
+extern double previous_cycle_time;
 
 class Vehicle {
  public:
@@ -93,7 +95,7 @@ class Vehicle {
   states_t state;
   
   vector <int> go_directions = {-2, -1, 0, 1, 2};
-
+  
   typedef enum {
     EXTREME_LEFT,
     LEFT,
@@ -136,8 +138,6 @@ class Vehicle {
 
   int lane_number(double s, double d);
 
-  double lane_d(double s, double d, int lane);
-  
   typedef struct {
     bool collision;
     int v_id;
@@ -241,7 +241,31 @@ class Vehicle {
     get_next_best_state(states_t cur_state, vector <sx_result_t> sx_rets);
 
   double
-    collision_cost(sx_trajectory_t *trajectory);
+    collision_cost(sx_trajectory_t *trajectory, string dbg_str);
+
+  double
+    time_diff_cost(double lookahead_dist, sx_trajectory_t *trajectory,
+		   string dbg_str);
+
+  double
+    time_diff_ext_cost(double lookahead_dist, sx_trajectory_t *trajectory,
+		       string dbg_str);
+
+  double
+    open_road_cost(sx_trajectory_t *trajectory, string dbg_str);
+  
+  double
+    truly_open_road_cost(sx_trajectory_t *trajectory, string dbg_str);
+  
+  double
+    lateral_accl_cost(sx_trajectory_t *trajectory, string dbg_str);
+
+  double
+    lc_min_speed_cost();
+
+  double
+    lc_complete_cost();
+    
 
   tuple < bool, int, double>
     check_for_collision(vector <double> *x,
@@ -268,7 +292,8 @@ class Vehicle {
 			   int lane, double s);
 
   std::tuple < double, double, bool>
-    get_accel_for_plcx(nbr_t in_back,
+    get_accel_for_plcx(nbr_t in_front,
+		       nbr_t in_back,
 		       int lane, double segment);
 };
 

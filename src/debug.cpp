@@ -16,8 +16,8 @@ using namespace std;
 
 
 bool debugging_enabled   = true;
-bool debugging_enabled_f = true;
-bool debugging_enabled_t = true;
+bool debugging_enabled_f = false;
+bool debugging_enabled_t = false;
 
 void
 debug_print_vehicle_info(string s, Vehicle v){

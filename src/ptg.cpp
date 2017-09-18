@@ -54,7 +54,6 @@ ptg_get_trajectory(double target_d,
   double ref_yaw = deg2rad(car_yaw);
 
   DEBUG("Get path trajectory...");
-  DEBUG("  previous path leftover " << prev_size);
 	       
   //Find the target s, v, 
   if(prev_size < 2)
@@ -118,11 +117,9 @@ ptg_get_trajectory(double target_d,
   ptsx.push_back(next_wp2[0]);
   ptsy.push_back(next_wp2[1]);
 
-  DEBUG(" pushed next 30, 60, 90 wps. total points " << ptsx.size());
+  //DEBUG(" pushed next 30, 60, 90 wps. total points " << ptsx.size());
 
-  DEBUG(" Transform to vehicle coordinate system");
-
-
+  //DEBUG(" Transform to vehicle coordinate system");
 
   std::tie(ptsx, ptsy) =
     tx_to_vehicle_coordinates(ptsx, ptsy, ref_x, ref_y, ref_yaw);
@@ -132,11 +129,7 @@ ptg_get_trajectory(double target_d,
 
   s.set_points(ptsx, ptsy);
 
-
-
-  //vector<double> next_x_vals;
-  //vector<double> next_y_vals;
-		
+  
   for(int i = 0; i < previous_path_x.size(); i++)
     {
       next_x_vals.push_back(previous_path_x[i]);

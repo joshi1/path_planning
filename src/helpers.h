@@ -7,7 +7,6 @@
 #include "debug.h"
 
 
-
 extern std::tuple <vector <double>, vector <double> >
   tx_to_vehicle_coordinates(vector<double> x,
 			    vector <double> y,
@@ -111,6 +110,25 @@ inline bool doubleGreater(double left, double right, double epsilon, bool orequa
   return (left > right);
 }
 
+//Utility function to get the curren time
+inline double
+get_current_time(high_resolution_clock::time_point start_time,
+		 double previous_time)
+{  
+  
+  high_resolution_clock::time_point current_time = high_resolution_clock::now();
+  auto cur_time_msec = duration_cast <milliseconds> (current_time -
+						     start_time).count();
+
+  if(previous_time != 0)
+    {
+      double cycle_time = cur_time_msec - previous_time;
+      
+      previous_cycle_time = cycle_time;
+    }
+  return cur_time_msec;
+  
+}
 
 
 

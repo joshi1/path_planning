@@ -17,6 +17,7 @@
 #include "road.h"
 #include "constants.h"
 #include "helpers.h"
+#include "vehicle.h"
 using namespace std;
 
 
@@ -39,31 +40,8 @@ string hasData(string s) {
   return "";
 }
 
-double previous_cycle_time = 500;
 
-//duration<double, std::milli>
-double
-get_current_time(high_resolution_clock::time_point start_time,
-		 double previous_time)
-{
-
-  
-  
-  high_resolution_clock::time_point current_time = high_resolution_clock::now();
-  auto cur_time_msec = duration_cast <milliseconds> (current_time -
-						     start_time).count();
-
-  if(previous_time != 0)
-    {
-      double cycle_time = cur_time_msec - previous_time;
-      
-      previous_cycle_time = cycle_time;
-    }
-  return cur_time_msec;
-  
-}
-
-int main() {
+int main(int argc, char** argv) {
   uWS::Hub h;
 
   // Load up map values for waypoint's x,y,s and d normalized normal vectors
@@ -73,13 +51,25 @@ int main() {
   vector<double> map_waypoints_dx;
   vector<double> map_waypoints_dy;
 
-  // Waypoint map to read from
-  string map_file_ = "../data/highway_map.csv";
-  //string map_file_ = "../data/highway_map_bosch1.csv";
-  //string map_file_ = "../data/highway_map_bosch1_final.csv";
-  // The max s value before wrapping around the track back to 0
-  //double max_s = 6945.554;
-
+  // Waypoint map to read from the provided file specific to the track
+  string map_file_;
+  string right_usage = "./path_planning [bosch | bosch_challenge]";
+  if (argc == 1){
+    map_file_ = "../data/highway_map.csv";
+  } else if (argc > 2){
+    cout << right_usage << endl;
+    exit(EXIT_FAILURE);
+  } else {
+    if (strcmp(argv[1], "bosch") == 0){
+      map_file_ = "../data/highway_map_bosch1.csv";  
+    } else if (strcmp(argv[1], "bosch_challenge") == 0){
+      map_file_ = "../data/highway_map_bosch1_final.csv";
+    } else {
+      cout << right_usage << endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+    
   ifstream in_map_(map_file_.c_str(), ifstream::in);
 
   string line;
@@ -102,10 +92,9 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
 
-  /**
-     In this approach we try to spline the map x,y points to add 50 
-     point in between consecutive points for better accuracy
-   **/
+  // In this approach we try to spline the map x,y points to add 50 
+  //  point in between consecutive points for better accuracy
+  
   Waypoints waypoints;
   waypoints.x  = map_waypoints_x;
   waypoints.y  = map_waypoints_y;
@@ -119,11 +108,13 @@ int main() {
 
   DEBUG("current points " << waypoints.x.size());
   waypoints_spline(&waypoints);
-  for(int i = 0; i < waypoints.x.size(); i++){
-    DEBUG("x:" << waypoints.x[i]
-	  << "y:" << waypoints.y[i]);
-  }
-  //Init ego_vechile. update_ego should init to the proper values
+
+  
+  // Create an instance of Road class.
+  // It holds
+  //    - ego_vehicle
+  //    - other vehicles on the road as per sensor fusion data
+  //    - waypoints data for the road
   auto road = Road(waypoints);
 
   printf(" Waypoints spline successful! \n");
@@ -131,16 +122,24 @@ int main() {
   printf(" NEW number of points %lu \n", waypoints.x_spline.size());
   printf(" ********************* \n");
 
-  //Send the waypoints info to the ego vehicle
+  cout << endl;
+  if(argc == 1){
+    cout << " udacity track!" << endl;
+  } else {
+    cout << argv[1] << " track" << endl;
+  }
+  cout << endl;
+  
   Vehicle *ego_vehicle = &road.ego_vehicle;
-    
+
+  // Send the waypoints info to the ego vehicle
   ego_vehicle->configure(&road.waypoints);
 
-  //Get the current time and store in start_time
+  // Get the current time and store in start_time
   high_resolution_clock::time_point start_time = high_resolution_clock::now();
   
-  //cur_time_msec will be used to get the start of each cycle in
-  //relation to the start_time
+  // cur_time_msec will be used to get the start of each cycle in
+  // relation to the start_time
   double cur_time_msec = 0;
   
   // For debugging
@@ -169,7 +168,7 @@ int main() {
 
 	  cur_time_msec = get_current_time(start_time, cur_time_msec);
 	  
-	  /***
+	  /**
 	  if(debug_loop > debug_loop_end){
 	    DEBUG("DEBUG LOOP END " << debug_loop << "," << debug_loop_end);
 	    exit(EXIT_SUCCESS);
@@ -202,9 +201,9 @@ int main() {
 
 	  int prev_size = previous_path_x.size();
 	  
-	  // Update ego vehicle with the latest info on where we are
 	  Vehicle *ego_vehicle = &road.ego_vehicle;
 
+	  // Update ego vehicle with the latest info
 	  ego_vehicle->update_ego(cur_time_msec,
 				  car_x,
 				  car_y,
@@ -215,6 +214,10 @@ int main() {
 
 	  debug_print_vehicle_info("Ego Vehicle", *ego_vehicle);
 
+	  // This is an important step for how the algorithm works.
+	  // The current segment of the car is set to the end_path_s
+	  // This means we create the trajectory only after the last
+	  // point we had provided in the previous cycle
 	  if(prev_size > 0){
 	    car_s = end_path_s;
 	  }
@@ -234,9 +237,7 @@ int main() {
 	      if (it != road.vehicles.end())
 		{
 
-		  //If the vehicle has been seen before update the dictionary
-		  //DEBUG("Vehicle found " << ":" << it->first);
-
+		  // If the vehicle has been seen before update the dictionary
 		  Vehicle *vehicle = &it->second;
 		  vehicle->update(cur_time_msec,
 				  sensor_fusion[i][1], 
@@ -251,8 +252,7 @@ int main() {
 		}
 	      else
 		{
-		  
-		  //If the vehicle is seen for the first time then create
+		  // If the vehicle is seen for the first time then create
 		  // the vehicles and put it in the dictionary	    
 		  Vehicle vehicle = Vehicle(sensor_fusion[i][0],
 					    sensor_fusion[i][1], 
@@ -264,13 +264,14 @@ int main() {
 
 		  vehicle.configure(&road.waypoints);
 
-		  road.vehicles.insert(std::pair<int, Vehicle> (sensor_fusion[i][0], vehicle));
+		  road.vehicles.insert(std::pair<int, Vehicle>
+				       (sensor_fusion[i][0], vehicle));
 		  
 		}
 	      
 	    }
 	  
-	  //Convertion to vector of double
+	  // Convertion previous path to vector of double
 	  vector <double> prev_path_x;
 	  vector <double> prev_path_y;
 	  for(int i = 0; i < previous_path_x.size(); i++)
@@ -281,7 +282,9 @@ int main() {
 	  
 	  vector<double> next_x_vals;
 	  vector<double> next_y_vals;
-	  
+
+	  // update_state function in vehicle.cpp will return the final points
+	  // This includes the previous points + additional points.
 	  std::tie(next_x_vals, next_y_vals) = 
 	    ego_vehicle->update_state(&road.vehicles,
 				      &prev_path_x,

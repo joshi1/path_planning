@@ -14,12 +14,14 @@
 
 using namespace std;
 
+// This cycle time is the time difference between the last and
+// current time we received the websocket call from the simulator.
+// Basically keeps track of how long it is taking the system to call us back
+// with teh current status.
+double previous_cycle_time = 500;
 
-/**
- * Initializes Vehicle
- */
 
-
+// Initializes Vehicle
 Vehicle::Vehicle(int v_id, double x, double y,
 		 double vx, double vy, double s, double d)
 {
@@ -46,6 +48,8 @@ Vehicle::Vehicle(int v_id, double x, double y,
     this->prev[i].time_stamp = -1; //Indicates invalid entry
   }
 
+  // This defines the finite-state-machine for the various different
+  // states and possible different state transitions. (pic in README)
   
 #ifdef DEBUGGING_KL_ONLY
   this->fsm = {
@@ -85,6 +89,8 @@ Vehicle::Vehicle(int v_id, double x, double y,
   
 }
 
+// Keeps track of the previous information of the vehicle. Max 50.
+// (Note: This information is not being currently exploited to its potential)
 void Vehicle::update_previous(){
 
   for(int i = SAVED_PREV_N-1; i > 0; i--) {
@@ -116,55 +122,29 @@ void Vehicle::update_previous(){
   
 }
 
-/*
- * Calculated by comparing rate of change of average speed over 0.2 seconds
- * SAVED_PREV_N = 50. And since we get called every 0.02 seconds, we have
- * 1 second worth of history. So look at the last 0.2 seconds i.e. i = 9
- */
-
+// Returns the current acceleration
 double
 Vehicle::get_cur_accl()
 {
   
   double accl = 0;
 
-  if(0)
-    {
-      for (int i = SAVED_PREV_N-1; i >= 0; i--){
-	if(this->prev[i].time_stamp != -1){
-	  double vi = this->prev[i].v;
-	  double vf = this->cur.v;
-	  double ti = this->prev[i].time_stamp;
-	  double tf = this->cur.time_stamp;
-	  DEBUG("Calculate Accl: vi=" << vi
-	      << "vf= " << vf
-	      << "ti= " << ti
-	      << "tf= " << tf);
-	  accl = (vf - vi)/(tf - ti);
-	  break;
-	}
-      }
-    } // if 0
-  else
-    {
-      if(this->prev[0].time_stamp != -1){
+  if(this->prev[0].time_stamp != -1){
+    
+    double vi = this->prev[0].v;
+    double vf = this->cur.v;
+    double ti = this->prev[0].time_stamp;
+    double tf = this->cur.time_stamp;
+    
+    accl = (vf - vi)/(tf - ti);
+  }
 
-	double vi = this->prev[0].v;
-	double vf = this->cur.v;
-	double ti = this->prev[0].time_stamp;
-	double tf = this->cur.time_stamp;
-
-	accl = (vf - vi)/(tf - ti);
-      }
-    }
-  
   return accl;
   
 }
 
-/*
- * Jerk is the average acceleration over 1 second interval
- */
+
+// Returns jerk - the average acceleration over 1 second interval
 double
 Vehicle::get_cur_jerk()
 {
@@ -188,7 +168,7 @@ Vehicle::get_cur_jerk()
   return jerk;
   
 }
-
+// Returns the current lateral velocity of the vehicle
 double
 Vehicle::get_cur_d_vel()
 {
@@ -205,10 +185,11 @@ Vehicle::get_cur_d_vel()
     vel = (df - di)/(tf - ti);
   }
   
-  return vel*0.44704;
+  return vel*0.44704; //mph to mps
   
 }
 
+// Returns the current lateral acceleration of the vehicle
 double
 Vehicle::get_cur_d_accl()
 {
@@ -229,7 +210,7 @@ Vehicle::get_cur_d_accl()
   
 }
 
-
+// Called when new informatoin is received for other vehicles on the road
 void Vehicle::update(double cur_time, double x, double y,
 		     double vx, double vy, double s, double d)
 {
@@ -242,11 +223,11 @@ void Vehicle::update(double cur_time, double x, double y,
   this->cur.y  = y;
   this->cur.vx = vx;
   this->cur.vy = vy;
-  this->cur.v = sqrt(vx*vx + vy*vy);// * 0.44704; //In m/sec
+  this->cur.v = sqrt(vx*vx + vy*vy);
   
   this->cur.s  = s;
   
-  //NOTE: Below for other vehicles may not give the right acceleration?
+  //TBD: Below for other vehicles may not give the right acceleration?
   this->cur.a = this->get_cur_accl(); 
 
   this->cur.jerk = this->get_cur_jerk();
@@ -262,6 +243,7 @@ void Vehicle::update(double cur_time, double x, double y,
 
 }
 
+// Called when new informatoin is received for ego vehicle
 void Vehicle::update_ego(double cur_time, double x, double y,
 			 double s, double d, double v, double yaw)
 {
@@ -270,7 +252,7 @@ void Vehicle::update_ego(double cur_time, double x, double y,
     
   this->cur.x   = x;
   this->cur.y   = y;
-  this->cur.v   = v* 0.44704; //In m/sec
+  this->cur.v   = v* 0.44704; //mph to mps
 
   this->cur.s  = s;
 
@@ -292,8 +274,7 @@ void Vehicle::update_ego(double cur_time, double x, double y,
 
 Vehicle::~Vehicle() {}
 
-
-//std::tuple < double, double, vector <double > , vector <double> >
+// This is the state transition function for transitions that are not allowed
 Vehicle::sx_result_t
 Vehicle::sx_NOP(states_t new_state,
 		sx_trajectory_t *ex_left,
@@ -308,14 +289,14 @@ Vehicle::sx_NOP(states_t new_state,
   res.state = new_state;
   
   DEBUG("*State X: INVALID: " << states_str[state] << "->" << states_str[new_state]);
-  //Return high cost
-  //return std::make_tuple(INVALID_COST, 0, prev_path_x, prev_path_y);
+  
   res.cost = INVALID_COST;
 
   return res;
 
 }
 
+// This is the state transition function for valid state transitions 
 Vehicle::sx_result_t
 Vehicle::sx_func(states_t new_state,
 		 sx_trajectory_t *ex_left,
@@ -344,6 +325,14 @@ Vehicle::sx_func(states_t new_state,
   
   states_t cur_state = this->state;
 
+  // Depending on the current and new state, this function returns the
+  // correct current and previous trajectories.
+  // Note that the ext_t trajectory is for new extreme right or extreme left
+  // depending on the lane where the ego vehicle's current location.
+  // Note that the ego-vehicle does not directly move, for example, from lane 1
+  // to lane 3, but the extreme trajectory will be taken into account when
+  // evaluating cost function and may favor a lane change with the goal of
+  // eventually going to the extreme lane. 
   std::tie (cur_t, new_t, ext_t) =
     sx_get_cur_new_trajectories(cur_state, new_state,
 				ex_left, left, straight, right, ex_right);
@@ -352,109 +341,52 @@ Vehicle::sx_func(states_t new_state,
   res.new_t = new_t;
   
   double tot_cost = 0;
-  double inc_cost = 0;
-
-  
-  //What would be the time cost for new lane and new_ref_vel.
-  // Assume some distance, say 100mts
+  //double inc_cost = 0;
 
   DEBUG(" Computing costs...");
 
-  //The below prevents multiple lane changes at the same time
-  
-  if(this->lcx_obj
-     && (new_state == LCR || new_state == LCL))
-    {
-      DEBUG(" ----- lcx obj found ----");
-      DEBUG(" ----- prev_lane "  << this->lcx_obj->prev_lane);
-      DEBUG(" ----- new_lane "  << this->lcx_obj->new_lane);
-      DEBUG(" ----- cur_lane "  << this->cur.lane);
-      //inc_cost = logistic(0);
-      double new_d = abs(this->lcx_obj->new_lane - this->cur.lane);
-      double prev_d = abs(this->lcx_obj->prev_lane - this->cur.lane);
+  // Logic to prefer open road i.e. vehicle not within FRONT_SCAN_RADIUS mts
+  tot_cost += open_road_cost(cur_t, "cur trj");
+  tot_cost += open_road_cost(new_t, "new trj");
+  tot_cost += open_road_cost(ext_t, "ext trj");
 
-      inc_cost = logistic(new_d);
-      DEBUG(" ----- 1. new_d "  << new_d << " logistic " << inc_cost);
-      
-      tot_cost += inc_cost;
-      
-      inc_cost = logistic(prev_d);
-      DEBUG(" ----- 2. prev_d "  << prev_d << " logistic " << inc_cost);
-	
-      tot_cost += inc_cost;
-      
-    }
-  else
-    {
-      inc_cost = logistic(1);
-      
-      DEBUG(" ----- NO lcx_obj -----");
-    }
-  DEBUG(" ------ LCX cost " << inc_cost);
-  tot_cost += inc_cost;
-    
-  //Logic to prefer open road i.e. vehicle not within FRONT_SCAN_RADIUS mts
-  if(cur_t->open_road == false){
-    tot_cost += 1;
-    DEBUG(" !open_road cost(cur)");
+  // Logic to prefer truly open road i.e. no vehicle as per sensor data
+  tot_cost += truly_open_road_cost(cur_t, "cur trj");
+  tot_cost += truly_open_road_cost(new_t, "new trj");
+  tot_cost += truly_open_road_cost(ext_t, "ext trj");
+  
+  // Keep the lookahead dist the same for all possible next states.
+  double lookahead_dist = 100;
+
+  // Time diff cost for curren trajectory
+  tot_cost += time_diff_cost(lookahead_dist, cur_t, "cur trj");
+
+  // Time diff cost for ext trajectory. This encourages lane change
+  // *towards* the extreme lane depending on the potential velocity in the
+  // extreme lane. For instance if we are in the left most lane stuck
+  // behind a vehicle, and there is a lower cost in the extreme right lane
+  // then a PLCR will have a lower cost...
+  tot_cost += time_diff_ext_cost(lookahead_dist, ext_t, "ext trj");
+
+  // Collision cost for current trajectory
+  tot_cost += collision_cost(cur_t, "cur trj");
+
+  // Cost if max lateral accleration is exceeded
+  tot_cost += lateral_accl_cost(cur_t, "cur trj");
+
+  // Make sure that lane changes at low speeds is discouraged
+  // This avoids being between lanes for too long
+  if(new_state == LCR || new_state == LCL){
+    tot_cost += lc_min_speed_cost();
   }
 
-  if(new_t->open_road == false){
-    tot_cost += 1;
-    DEBUG(" !open_road cost(new)");
-  }
-
-  if(new_t->in_front.truly_open_road == false) {
-    tot_cost += 1;
-    DEBUG(" !truly_open_road cost(new)");
-  }
-
-  if(cur_t->in_front.truly_open_road == false) {
-    tot_cost += 1;
-    DEBUG(" !truly_open_road cost(cur)");
-  }
-
+  // Cost during Lane chang transition. ensures that the cost is the
+  // best when target lane is reached. Basically prevents multiple
+  // lane changes in one shot...
+  tot_cost += lc_complete_cost();
   
-  if(ext_t)
-    {
-      if (ext_t->open_road == false){
-	tot_cost += 1;
-	DEBUG(" !open_road cost(ext_t)");
-      }
-    }
-  else
-    {
-      tot_cost += 1;
-      DEBUG(" !open_road cost(ext_t == NULL)");
-    }
-  
-  //Keep the lookahead dist the same for all possible next states.
-  // The above causes too many lane changes. 
-  double lookahead_dist_new = 100;
-  double lookahead_dist_cur = lookahead_dist_new;
-
-  
-  //double lookahead_dist_cur = (cur_t->ref_s + cur_t->add_on) - this->cur.s;
-  //cost time diff for cur
-  double time = lookahead_dist_cur/new_t->ref_vel;
-  inc_cost = logistic(time);
-  
-  DEBUG(" Time diff cost(new): " << inc_cost
-	<< " ref vel:" << new_t->ref_vel
-	<< " lookahead dist " << lookahead_dist_cur);
-  
-  tot_cost += inc_cost;
-
-  inc_cost = collision_cost(cur_t);
-  
-  DEBUG(" Collision cost (cur):" << inc_cost);
-  tot_cost += inc_cost;
-
-  if(cur_t->lateral_accel > MAX_ACCL){
-    DEBUG(" Lateral accel (cur)" << cur_t->lateral_accel);
-    tot_cost += 1;
-  }
-  
+  // For PLCX transitions, we use the current lane, cos there is really
+  // no new lane change.
   sx_trajectory_t *check_t;
   if((new_state == PLCR) || (new_state == PLCL)){
     check_t = cur_t;
@@ -462,28 +394,15 @@ Vehicle::sx_func(states_t new_state,
     check_t = new_t;
   }
 
-  inc_cost = collision_cost(check_t);
+  // Collision cost for new trajectory (for non-prep state changes)
+  tot_cost += collision_cost(check_t, "check trj");
   
-  DEBUG(" Collision cost (new):" << inc_cost);
-  tot_cost += inc_cost;
-
-
-  //cost time diff for new
-  time = lookahead_dist_new/check_t->ref_vel;
-  inc_cost = logistic(time);
+  // Time diff cost for new trajectory (for non-prep state changes)
+  tot_cost += time_diff_cost(lookahead_dist, check_t, "check trj");
   
-  DEBUG(" Time diff cost (again): " << inc_cost
-	<< " ref vel:" << check_t->ref_vel
-	<< " lookahead dist " << lookahead_dist_new);
-  
-  tot_cost += inc_cost;
+  // Lateral acceleration cost
+  tot_cost += lateral_accl_cost(check_t, "check trj");
 
-
-  if(check_t->lateral_accel > MAX_ACCL){
-    DEBUG(" Lateral accel (new)" << check_t->lateral_accel);
-    tot_cost += 1;
-  }
-  
   res.cost = tot_cost;
   res.ref_vel = check_t->ref_vel;
   res.next_x_vals = check_t->next_x_vals;
@@ -533,11 +452,6 @@ Vehicle::get_max_accel_for_lane(nbr_t in_front, int lane, double s)
       DEBUG("  available room = " << available_room);
       max_acc = min(max_acc, available_room);
 
-      /**
-      if(target_dist < 0){
-      	max_acc = -MAX_ACCL;
-      }
-      **/
       
       double rel_vel = in_front.v->cur.v - this->cur.v;
       DEBUG("  relative velocity " << rel_vel);
@@ -545,10 +459,27 @@ Vehicle::get_max_accel_for_lane(nbr_t in_front, int lane, double s)
       //Maintain at least 2 seconds worth of distance
       double d = fabs(rel_vel*2);
       DEBUG("  relative velocity d " << d);
-      
-      if(target_dist > d){
+
+      if(target_dist < 0){
+	DEBUG(" ********* target_dist < 0");
+	//double mult_factor = 1 - 1(1 + fabs(separation));
+	//max_acc = -fabs(separation_next/PREFERRED_BUFFER)*MAX_ACCL;
+	max_acc = -MAX_ACCL;
+      } else
+	if(target_dist > d){
+	  DEBUG(" ********* target_dist > 0");
+	// Make this proportional between target_d and d,
+	// i.e. higher the difference the acceleration gets closer to
+	// MAX_ACCL
+	double diff = target_dist - d;
+	
+	double mult_factor = 1 - 1/(1 + diff);
+	      
+	//max_acc = mult_factor*MAX_ACCL;
 	max_acc = MAX_ACCL;
+	
       } else {
+	  DEBUG(" ********* target_dist > 0 and < d");
 	double cur_v = this->cur.v;
 	if(cur_v == 0) {
 	  cur_v = 1;
@@ -561,6 +492,7 @@ Vehicle::get_max_accel_for_lane(nbr_t in_front, int lane, double s)
 	  max_acc *= 1;
 	}
       }
+
       
       
     }
@@ -568,9 +500,7 @@ Vehicle::get_max_accel_for_lane(nbr_t in_front, int lane, double s)
     {
       DEBUG("  Open road...");
       DEBUG("     target_dist " << target_dist);
-      open_road = true;
-      //To give open road preference
-      //max_acc += .001;
+      open_road = true; //used to given open road preference
     }
   
   DEBUG("  max_acc = " << max_acc);
@@ -584,7 +514,7 @@ Vehicle::get_max_accel_for_lane(nbr_t in_front, int lane, double s)
 }
 
 
-//TODO: CLEANUP Input variables!
+// returns new reference velocity for lane
 std::tuple <double, double, double, bool>
 Vehicle::get_new_ref_vel_for_lane(bool prep_lc,
 				  nbr_t in_front,
@@ -599,7 +529,8 @@ Vehicle::get_new_ref_vel_for_lane(bool prep_lc,
   
   if(prep_lc == true)
     {
-      std::tie(accl, target_dist, open_road) = get_accel_for_plcx(in_back,
+      std::tie(accl, target_dist, open_road) = get_accel_for_plcx(in_front,
+								  in_back,
 								  lane,
 								  segment);
     }
@@ -637,7 +568,7 @@ Vehicle::get_new_ref_vel_for_lane(bool prep_lc,
 
 
 double
-Vehicle::collision_cost(sx_trajectory_t *trajectory)
+Vehicle::collision_cost(sx_trajectory_t *trajectory, string dbg_str)
 {
   
   double cost = 0;
@@ -646,9 +577,124 @@ Vehicle::collision_cost(sx_trajectory_t *trajectory)
     cost = HIGH_COST;
   }
 
+  DEBUG(" Collision cost (" << dbg_str << "): " << cost);
+  
   return cost;
   
 }
+
+double
+Vehicle::time_diff_cost(double lookahead_dist, sx_trajectory_t *trajectory,
+			string dbg_str)
+{
+  double cost = 0;
+  
+  double time = lookahead_dist/trajectory->ref_vel;
+  cost = logistic(time);
+  
+  DEBUG(" Time diff cost (" << dbg_str << "): " << cost);
+  
+  return cost;
+}
+
+double
+Vehicle::time_diff_ext_cost(double lookahead_dist, sx_trajectory_t *trajectory,
+			    string dbg_str)
+{
+  double cost = 1;
+  if(trajectory) {
+    double time = lookahead_dist/trajectory->ref_vel;
+    cost = logistic(time);
+  }
+  
+  DEBUG(" Time diff ext cost (" << dbg_str << "): " << cost);
+  return cost;
+}
+
+double
+Vehicle::open_road_cost(sx_trajectory_t *trajectory, string dbg_str)
+{
+  double cost = 1;
+  
+  if(trajectory)
+    {
+      if (trajectory->open_road == true){
+	cost = 0;
+      }
+    }
+  DEBUG(" Open road cost (" << dbg_str << "): " << cost);
+  
+  return cost;
+}
+
+double
+Vehicle::truly_open_road_cost(sx_trajectory_t *trajectory, string dbg_str)
+{
+  double cost = 1;
+  
+  if(trajectory)
+    {
+      if (trajectory->in_front.truly_open_road == true){
+	cost = 0;
+      }
+    }
+  DEBUG(" Truly open road cost (" << dbg_str << "): " << cost);
+  return cost;
+}
+
+double
+Vehicle::lateral_accl_cost(sx_trajectory_t *trajectory, string dbg_str)
+{
+  double cost = 0;
+
+  if(trajectory->lateral_accel > MAX_ACCL){
+    cost = 1;
+  }
+  
+  DEBUG(" Lateral accl cost (" << dbg_str << "): " << cost);
+  
+  return cost;
+}
+
+double
+Vehicle::lc_min_speed_cost()
+{
+  double cost = 0;
+
+  if(this->cur.v < MIN_SPEED_FOR_LC){
+    cost = 1;
+  }
+  
+  DEBUG(" Lane change min speed cost: " << cost);
+  
+  return cost;
+}
+
+double
+Vehicle::lc_complete_cost()
+{
+  double cost = 0;
+
+  if(this->lcx_obj)
+    {
+      double new_d = abs(this->lcx_obj->new_lane - this->cur.lane);
+      double prev_d = abs(this->lcx_obj->prev_lane - this->cur.lane);
+      
+      cost += logistic(new_d);
+      
+      cost += logistic(prev_d);
+      
+      DEBUG(" Lane change complete cost: " << cost);
+    }
+  else
+    {
+      cost += logistic(30);
+      DEBUG(" No Lane change cost: " << cost);
+    }
+
+  return cost;
+}
+
 
 
 tuple < bool, int, double>
@@ -678,12 +724,10 @@ Vehicle::check_for_collision(vector <double> *x_ptr,
   vector < vector <double> > xyts;
 
   GET_CUR_TIME_START();
-  //Create x, y and time array for the trajectory
+  // Create x, y and time vector for the trajectory
   for(int i = 0; i < x.size(); i += 2 )
     {
       vector <double> xyt;
-
-      //int wp_trial = ClosestWaypoint_hash(x[i], y[i], &this->waypoints.m);
 
       // Get the segment from x and y
       int wp = ClosestWaypoint(x[i],
@@ -692,7 +736,7 @@ Vehicle::check_for_collision(vector <double> *x_ptr,
 			       this->waypoints->y_spline);
       double segment = this->waypoints->s_spline[wp];
       
-      //Now, given the new velocity, when does ego vehicle reach this segment
+      // Now, given the new velocity, when does ego vehicle reach this segment
       double dist = segment - this->cur.s;
 
       if(dist < 0) continue;
@@ -1137,7 +1181,13 @@ Vehicle::sx_get_cur_new_trajectories(states_t cur_state,
   return make_tuple(cur_t, new_t, ext_t);
 }
 
-
+// Main update_state function that returns the final trajectory.
+// 1. It computes the possible trajectories given the other vehicles
+//    on the road. right, straight, left, extreme_right/left depending on the
+//    current lane of the car.
+// 2. It then walks through the possible state transitions from current state
+//    and select the action picks the state transition with the best cost. It
+//    returns the trajectory associated with this state transition
 std::tuple <vector <double>, vector <double> > 
 Vehicle::update_state(map<int, Vehicle> *vehicles,
 		      vector <double> *prev_path_x,
@@ -1148,24 +1198,13 @@ Vehicle::update_state(map<int, Vehicle> *vehicles,
 
 
   GET_CUR_TIME_START();
-  //state = "KL"; // this is an example of how you change state.
   
-  //Look the current state and for the possible next states, predict the paths
-
-  states_t cur_state = state;
-  
-  DEBUG("Current state:" << state);
-
-  vector <state_x_func_t> possible_next_states = this->fsm[cur_state];
-
-  //compute all trajectories
-  // left, straight, extreme_left & extreme_right
+  // Generate trajectories for left, straight, right, extreme_left
+  // & extreme_right depending on the current lane
   vector < sx_trajectory_t > trajectories;
     
   for(int i = 0; i < go_directions.size(); i++)
     {
-      //Allocate trajectory structure
-      
       sx_trajectory_t trajectory;
       
       int go_direction = go_directions[i];
@@ -1181,9 +1220,10 @@ Vehicle::update_state(map<int, Vehicle> *vehicles,
       DEBUG("");
       DEBUG("Trajectory for " << go_dir_str[i]);
 
-
       nbr_t in_front, in_back;
 
+      // Find the nearest front back neighbor for the new_lane.
+      //  (Note the new_lane maybe same as the current lane)
       std::tie(in_front, in_back) =
 	find_nearest_front_back_in_lane(vehicles, new_lane, this->cur.s);
       
@@ -1191,45 +1231,45 @@ Vehicle::update_state(map<int, Vehicle> *vehicles,
       double new_ref_vel;
       double new_accl;
       double target_dist;
-      bool open_road;
+      bool   open_road;
+
+      // Get the new reference velocity for the new_lane
       std::tie(new_ref_vel, new_accl, target_dist, open_road) =
-	get_new_ref_vel_for_lane(false, in_front, in_back, new_lane, this->cur.s);
+	get_new_ref_vel_for_lane(false, in_front, in_back, new_lane, ref_s/*this->cur.s*/);
       
       
-      //Dependendent on the velocity. The higher the velocty you can project
-      // a little further ahead
-      //int num_points = 30 + (75 - 30)*new_ref_vel/SPEED_LIMIT_M;
+      // Note that the above function return target distance. This is the
+      // distance between the ego_vehicle and the vehicle it wants to follow
+      // in the new_lane OR open road 
 
-
+      // The below ensures that lookahead distance is between 50 and 220 mts
+      //  220mts ~ 10seconds at max velocity
       double lookahead_dist = target_dist;
       if(lookahead_dist < MIN_LOOKAHEAD_DIST) lookahead_dist = MIN_LOOKAHEAD_DIST;
 
       if(lookahead_dist > MAX_LOOKAHEAD_DIST) lookahead_dist = MAX_LOOKAHEAD_DIST;
 
+      // Decides the number of TOTAL new points to be generated.
+      // 1. Takes into account how often we get updates from the system. i.e
+      //    the number of points that wouldve been consumed
+      // 2. + MIN_NEXT_XY_VALS
+
+      int next_xy_vals = (previous_cycle_time/(EGO_UPDATE_TIME*1000) +
+			  MIN_NEXT_XY_VALS);
       
-      int next_xy_vals = (previous_cycle_time/(EGO_UPDATE_TIME*1000) + //number of points consumed
-		      MIN_NEXT_XY_VALS +
-		      (MAX_LOOKAHEAD_DIST - MIN_LOOKAHEAD_DIST)/lookahead_dist);
-      
-      //Add MIN_NEXT_XY_TO_ADD points
+      // Ensures that we have a set of minimum (MIN_NEXT_XY_TO_ADD) points
+      // If no points are added during a cycle, there is a dicontinuity between
+      // contiguous cycles that could result in max_accl being exceeded
       int num_new_xy = next_xy_vals - prev_path_x->size();
       
       if(num_new_xy < 0)
 	{
-	  DEBUG(" next_xy fewer than prev");
 	  next_xy_vals = prev_path_x->size() + MIN_NEXT_XY_TO_ADD;
 	}
       else if( num_new_xy < MIN_NEXT_XY_TO_ADD)
 	{
-	  //Make it minimum of MIN_NEXT_XY_TO_ADD number of points
-	  DEBUG(" not enough points for MIN_NEXT_XY_TO_ADD");
 	  next_xy_vals += (MIN_NEXT_XY_TO_ADD - num_new_xy);
 	}
-
-      DEBUG("target dist " << target_dist);
-      DEBUG("lookahead distance " << lookahead_dist);
-      DEBUG("num_new_xy  " << num_new_xy);
-      DEBUG("next_xy points " << next_xy_vals);
       
       ptg_get_trajectory(lookahead_dist,
 			 next_xy_vals,
@@ -1253,14 +1293,12 @@ Vehicle::update_state(map<int, Vehicle> *vehicles,
 			    in_back,
 			    new_ref_vel);
 
+      // Get lateral acceleration for trajectory
       vector <double> pt1 = {trajectory.next_x_vals[0], trajectory.next_y_vals[0]};
       vector <double> pt2 = {trajectory.next_x_vals[1], trajectory.next_y_vals[1]};
       vector <double> pt3 = {trajectory.next_x_vals[2], trajectory.next_y_vals[2]};
       double lateral_accel = ptg_get_lateral_accel(pt1, pt2, pt3, new_ref_vel);
 
-      if(lateral_accel > MAX_ACCL){
-	DEBUG("*** Lateral accl exceeded!");
-      }
       
       trajectory.coll            = coll;
       trajectory.ref_s           = ref_s;
@@ -1277,10 +1315,15 @@ Vehicle::update_state(map<int, Vehicle> *vehicles,
       DEBUG("");
     }
   
-  //DEBUG
   debug_print_all_trajectories(&trajectories, go_dir_str);
   
-    
+  // Current state local variable
+  states_t cur_state = state;
+  
+  DEBUG("Current state:" << state);
+
+  vector <state_x_func_t> possible_next_states = this->fsm[cur_state];
+
   //Now walk through the possible next steps and select the action
   // with the lowest cost.
   vector <sx_result_t> ress; //Collect the results in this vector
@@ -1314,10 +1357,15 @@ Vehicle::update_state(map<int, Vehicle> *vehicles,
     {
       if(best_res.state == LCL || best_res.state == LCR)
 	{
-	  lcx_obj_t *lcx_obj = new lcx_obj_t;
-	  lcx_obj->new_lane  = best_res.new_t->new_lane;
-	  lcx_obj->prev_lane = this->cur.lane;
-	  this->lcx_obj = lcx_obj;
+	  // If new transition allocate lcx_obj. This object
+	  // will live through the lane change transition
+	  if (this->lcx_obj == NULL)
+	    {
+	      lcx_obj_t *lcx_obj = new lcx_obj_t;
+	      lcx_obj->new_lane  = best_res.new_t->new_lane;
+	      lcx_obj->prev_lane = this->cur.lane;
+	      this->lcx_obj = lcx_obj;
+	    }
 	}
       else 
 	{
@@ -1326,37 +1374,19 @@ Vehicle::update_state(map<int, Vehicle> *vehicles,
 	}
     }
 
-  
-  if(best_res.state == PLCL || best_res.state == PLCR)
-    {
-      DEBUG(" *** New best state PLCX: Get new ref velocity");
-      
-      double new_ref_vel, new_accl, target_dist;
-      bool open_road;
-      
-      //Get best acceleration for lane change
-      std::tie(new_ref_vel, new_accl, target_dist, open_road)
-	= get_new_ref_vel_for_lane(true,
-				   best_res.new_t->in_front,
-				   best_res.new_t->in_back,
-				   best_res.new_t->new_lane,
-				   this->cur.s);
-      
-	      
-      //Regnerate trajectory
-      
-      
-    }
-  
+
+  vector <double> final_next_x_vals;
+  vector <double> final_next_y_vals;
+
   this->state = best_res.state;
   this->ref_vel = best_res.ref_vel;
   
   GET_CUR_TIME_END();
   GET_DURATION("****** update_state:");
-
-  vector <double> final_next_x_vals = best_res.next_x_vals;
-  vector <double> final_next_y_vals = best_res.next_y_vals;
-
+  
+  final_next_x_vals = best_res.next_x_vals;
+  final_next_y_vals = best_res.next_y_vals;
+  
   return std::make_tuple(final_next_x_vals, final_next_y_vals);
   
 }
@@ -1372,7 +1402,6 @@ vector<double> Vehicle::state_at(double t)
   /*
     Predicts state of vehicle in t seconds (assuming constant acceleration)
   */
-  //t = t/0.02;
   
   double s_new      = this->cur.s + (this->cur.v * t) + (this->cur.a * t * t) / 2;
   double s_dot_new  = this->cur.v + (this->cur.a * t);
@@ -1491,7 +1520,8 @@ Vehicle::find_nearest_front_back_in_lane(map<int, Vehicle> *vehicles,
 
 
 std::tuple < double, double, bool>
-Vehicle::get_accel_for_plcx(nbr_t in_back,
+Vehicle::get_accel_for_plcx(nbr_t in_front,
+			    nbr_t in_back,
 			    int lane,
 			    double segment)
 {
@@ -1542,32 +1572,6 @@ Vehicle::get_accel_for_plcx(nbr_t in_back,
   DEBUG("  accl " << accl);
   return std::make_tuple(accl, target_dist, open_road);
 }
-
-double
-Vehicle::lane_d(double s, double d, int lane)
-{
-    vector <double> pos = getXY(s,
-			     d,
-			     this->waypoints->s_spline,
-			     this->waypoints->x_spline,
-			     this->waypoints->y_spline);
-  
-    
-  int wp = ClosestWaypoint(pos[0],
-			   pos[1],
-			   this->waypoints->x_spline,
-			   this->waypoints->y_spline);
-  
-  //DEBUG("  Closest waypoint index to this car " << wp);
-
-  double waypoint_d = this->waypoints->spline_d[wp];
-  
-  //DEBUG("  Waypoint d " << waypoint_d);
-
-  //return (waypoint_d + (lane - 1)*LANE_WIDTH + LANE_WIDTH/2);
-  return ((lane - 1)*LANE_WIDTH + LANE_WIDTH/2);
-}
-
 
 /*
  * Computes if the vehicle is in one of the lanes. And if so, returns 

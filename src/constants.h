@@ -24,15 +24,16 @@ using namespace std;
 #define LANE_WIDTH           4
 #define SPEED_LIMIT          22.352 //50mph in m/s
 #define SPEED_LIMIT_MAX      (0.996*SPEED_LIMIT) 
-#define PREFERRED_BUFFER     (5*VEHICLE_LENGTH) //meters
+#define PREFERRED_BUFFER     (2*VEHICLE_LENGTH) //meters
 #define FRONT_SCAN_RADIUS    100 //meters
 #define FRONT_SCAN_FURTHEST_RADIUS 200 //meters
+#define MIN_SPEED_FOR_LC     10 //close to 25mph
 
 
 //TAKE into account VEHICLE_LENGTH. 
 //#define BACK_SCAN_RADIUS     PREFERRED_BUFFER + VEHICLE_LENGTH + 2 //meters. 
+//#define BACK_SCAN_RADIUS     2*VEHICLE_LENGTH //meters. 
 #define BACK_SCAN_RADIUS     50 //meters. 
-
 
 /******* BELOW UNUSED *******/
 /** PTG Constants **/
