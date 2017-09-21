@@ -238,7 +238,11 @@ class Vehicle {
   vector<double> state_at(double t);
 
   sx_result_t
-    get_next_best_state(states_t cur_state, vector <sx_result_t> sx_rets);
+    get_next_best_state(states_t cur_state,
+			sx_trajectory_t *left,
+			sx_trajectory_t *straight,
+			sx_trajectory_t *right,
+			vector <sx_result_t> sx_rets);
 
   double
     collision_cost(sx_trajectory_t *trajectory, string dbg_str);

@@ -358,8 +358,11 @@ Vehicle::sx_func(states_t new_state,
   // Keep the lookahead dist the same for all possible next states.
   double lookahead_dist = 100;
 
-  // Time diff cost for curren trajectory
+  // Time diff cost for current trajectory
   tot_cost += time_diff_cost(lookahead_dist, cur_t, "cur trj");
+
+  // Time diff cost for new trajectory 
+  tot_cost += time_diff_cost(lookahead_dist, new_t, "new trj");
 
   // Time diff cost for ext trajectory. This encourages lane change
   // *towards* the extreme lane depending on the potential velocity in the
@@ -369,10 +372,13 @@ Vehicle::sx_func(states_t new_state,
   tot_cost += time_diff_ext_cost(lookahead_dist, ext_t, "ext trj");
 
   // Collision cost for current trajectory
-  tot_cost += collision_cost(cur_t, "cur trj");
+  //tot_cost += collision_cost(cur_t, "cur trj");
 
   // Cost if max lateral accleration is exceeded
   tot_cost += lateral_accl_cost(cur_t, "cur trj");
+  
+  // Lateral acceleration cost
+  tot_cost += lateral_accl_cost(new_t, "new trj");
 
   // Make sure that lane changes at low speeds is discouraged
   // This avoids being between lanes for too long
@@ -385,28 +391,22 @@ Vehicle::sx_func(states_t new_state,
   // lane changes in one shot...
   tot_cost += lc_complete_cost();
   
+  // Collision cost for new trajectory (for non-prep state changes)
+  //tot_cost += collision_cost(check_t, "check trj");
+  
   // For PLCX transitions, we use the current lane, cos there is really
   // no new lane change.
-  sx_trajectory_t *check_t;
+  sx_trajectory_t *return_t;
   if((new_state == PLCR) || (new_state == PLCL)){
-    check_t = cur_t;
+    return_t = cur_t;
   } else {
-    check_t = new_t;
+    return_t = new_t;
   }
 
-  // Collision cost for new trajectory (for non-prep state changes)
-  tot_cost += collision_cost(check_t, "check trj");
-  
-  // Time diff cost for new trajectory (for non-prep state changes)
-  tot_cost += time_diff_cost(lookahead_dist, check_t, "check trj");
-  
-  // Lateral acceleration cost
-  tot_cost += lateral_accl_cost(check_t, "check trj");
-
   res.cost = tot_cost;
-  res.ref_vel = check_t->ref_vel;
-  res.next_x_vals = check_t->next_x_vals;
-  res.next_y_vals = check_t->next_y_vals;
+  res.ref_vel = return_t->ref_vel;
+  res.next_x_vals = return_t->next_x_vals;
+  res.next_y_vals = return_t->next_y_vals;
   
   DEBUG("Total Cost: " << tot_cost);
   DEBUG("");
@@ -618,9 +618,21 @@ Vehicle::open_road_cost(sx_trajectory_t *trajectory, string dbg_str)
   
   if(trajectory)
     {
-      if (trajectory->open_road == true){
-	cost = 0;
-      }
+      if(AGGRESSIVE_DRIVING)
+	{
+	  if(trajectory->target_dist > 20)
+	    {
+	      cost = 1 - logistic(trajectory->target_dist);
+	    }
+	}
+      else
+	{
+	  if (trajectory->open_road == true){
+	  	cost = 0;
+	  }
+
+	}
+	
     }
   DEBUG(" Open road cost (" << dbg_str << "): " << cost);
   
@@ -781,14 +793,20 @@ Vehicle::check_for_collision(vector <double> *x_ptr,
 
 	  
 	  if(d < VEHICLE_CLOSEST_DIST){
-	    DEBUG("   Collision predicted with Vehicle (in front) " << in_front.v->v_id
-		  << " seg: " << in_front.v->cur.s
-		  << " speed: " << in_front.v->cur.v);
-	    DEBUG("      in time " << t);
-	    DEBUG("      come close as (mts)" << d);
+	    DEBUG("   Collision predicted with Vehicle " << in_front.v->v_id
+		 <<"(in front)... ");
+
+	    DEBUG("     in time: " << t << " closeness: " << d);
+	    DEBUG("     Id: " << in_front.v->v_id);
+	    DEBUG("       lane: " << in_front.v->cur.lane);
+	    DEBUG("        seg: " << in_front.v->cur.s);
+	    DEBUG("      speed: " << in_front.v->cur.v);
+	    DEBUG("     Ego:");
+	    DEBUG("       lane: " << this->cur.lane);
+	    DEBUG("        seg: " << this->cur.s);
+	    DEBUG("      speed: " << this->cur.v);
 	    if(this->cur.v > in_front.v->cur.v){
-	      DEBUG("    !! shouldnt be an accident. relative vel "
-		    << (this->cur.v - in_front.v->cur.v));
+	      DEBUG("    my vel higher ");
 	    }
 	      
 	    collision = true;
@@ -822,16 +840,22 @@ Vehicle::check_for_collision(vector <double> *x_ptr,
 	  
       
 	  if(d < VEHICLE_CLOSEST_DIST){
-	    DEBUG("   Collision predicted with Vehicle (in back) " << in_back.v->v_id
-		  << " seg: " << in_back.v->cur.s
-		  << " speed: " << in_back.v->cur.v);
-	    DEBUG("      in time " << t);
-	    DEBUG("      come close as (mts) " << d);
-
+	    DEBUG("   Collision predicted with Vehicle" << in_back.v->v_id
+		 << "(in back)... ");
+	    
+	    DEBUG("     in time: " << t << " closeness: " << d);
+	    DEBUG("     Id: " << in_back.v->v_id);
+	    DEBUG("       lane: " << in_back.v->cur.lane);
+	    DEBUG("        seg: " << in_back.v->cur.s);
+	    DEBUG("      speed: " << in_back.v->cur.v);
+	    DEBUG("     Ego:");
+	    DEBUG("       lane: " << this->cur.lane);
+	    DEBUG("        seg: " << this->cur.s);
+	    DEBUG("      speed: " << this->cur.v);
 	    if(this->cur.v > in_back.v->cur.v){
-	      DEBUG("    !! shouldnt be an accident. relative vel "
-		    << (this->cur.v - in_back.v->cur.v));
+	      DEBUG("    my vel higher ");
 	    }
+	    
 
 	    collision = true;
 	    coll_v_id = in_back.v->v_id;
@@ -866,7 +890,11 @@ Vehicle::sx_valid_lane_change(states_t new_state)
 
 
 Vehicle::sx_result_t
-Vehicle::get_next_best_state(states_t cur_state, vector <sx_result_t> sx_res)
+Vehicle::get_next_best_state(states_t cur_state,
+			     sx_trajectory_t *left,
+			     sx_trajectory_t *straight,
+			     sx_trajectory_t *right,
+			     vector <sx_result_t> sx_res)
 {
   GET_CUR_TIME_START();
   DEBUG(" get_next_best_state: In");
@@ -880,7 +908,45 @@ Vehicle::get_next_best_state(states_t cur_state, vector <sx_result_t> sx_res)
     best_res = sx_res[0];
     return best_res;
   }
+
   
+  for(int i = 0; i < sx_res.size(); i++)
+    {
+      switch(sx_res[i].state)
+	{
+	case KL:
+	  {
+	    sx_res[i].cost += collision_cost(straight, "KL");
+	    DEBUG("  **   KL cost: " << sx_res[i].cost);
+	    break;
+	  }
+	case PLCL:
+	  {
+	    sx_res[i].cost += collision_cost(straight, "PLCL");
+	    DEBUG("  ** PLCL cost: " << sx_res[i].cost);
+	    break;
+	  }
+	case PLCR:
+	  {
+	    sx_res[i].cost += collision_cost(straight, "PLCR");
+	    DEBUG("  ** PLCR cost: " << sx_res[i].cost);
+	    break;
+	  }
+	case LCL:
+	  {
+	    sx_res[i].cost += collision_cost(left, "LCL");
+	    DEBUG("  **  LCL cost: " << sx_res[i].cost);
+	    break;
+	  }
+	case LCR:
+	  {
+	    sx_res[i].cost += collision_cost(right, "LCR");
+	    DEBUG("  **  LCR cost: " << sx_res[i].cost);
+	    break;
+	  }
+	}
+    }
+
   for(int i = 0; i < sx_res.size(); i++)
     {
       if(doubleGreater(min_cost, sx_res[i].cost)){
@@ -920,8 +986,8 @@ Vehicle::get_next_best_state(states_t cur_state, vector <sx_result_t> sx_res)
 	      found = true;
 	      best_res = possible_best_states[i];
 	      DEBUG("  Prefer LCX");
+	      break;
 	    }
-	  
 	}
 
       //2. if above failed to find, then preserve current state if possible
@@ -1272,7 +1338,7 @@ Vehicle::update_state(map<int, Vehicle> *vehicles,
 	}
       
       ptg_get_trajectory(lookahead_dist,
-			 next_xy_vals,
+			 50, //next_xy_vals,
 			 ref_s,
 			 new_ref_vel,
 			 this->cur.x,
@@ -1315,7 +1381,7 @@ Vehicle::update_state(map<int, Vehicle> *vehicles,
       DEBUG("");
     }
   
-  debug_print_all_trajectories(&trajectories, go_dir_str);
+  //debug_print_all_trajectories(&trajectories, go_dir_str);
   
   // Current state local variable
   states_t cur_state = state;
@@ -1347,12 +1413,19 @@ Vehicle::update_state(map<int, Vehicle> *vehicles,
   //DEBUG
   debug_print_all_sx_func_results(states_str[state], &ress, states_str);
 
-  sx_result_t best_res = get_next_best_state(cur_state, ress);
+  sx_result_t best_res = get_next_best_state(cur_state,
+					     &trajectories[LEFT],
+					     &trajectories[STRAIGHT],
+					     &trajectories[RIGHT],
+					     ress);
 
-  DEBUG(" ** State Transition " << states_str[state]
-	<< " to " << states_str[best_res.state]);
-  DEBUG("       New ref vel " << best_res.ref_vel);
-
+  cout << " ** State Transition from " << states_str[state]
+       << " to " << states_str[best_res.state] << endl;
+  
+  cout << "       New ref vel "
+       << best_res.ref_vel << " meters/sec"
+       << "(" << best_res.ref_vel/0.44704 << " mph)" << endl;
+  
   if(state != best_res.state)
     {
       if(best_res.state == LCL || best_res.state == LCR)

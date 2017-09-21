@@ -4,11 +4,11 @@
 
 using namespace std;
 
-#define EXTREME_RIGHT_LEFT_ALLOWED  true
+#define AGGRESSIVE_DRIVING   false
 
 /** Vehicle constraints **/
 #define VEHICLE_LENGTH       5
-#define VEHICLE_CLOSEST_DIST (1.5*VEHICLE_LENGTH)
+#define VEHICLE_CLOSEST_DIST (VEHICLE_LENGTH)
 
 /** Road/Environment Constants **/
 #define EGO_UPDATE_TIME      0.02 //Ego updated every .02 second
@@ -33,7 +33,7 @@ using namespace std;
 //TAKE into account VEHICLE_LENGTH. 
 //#define BACK_SCAN_RADIUS     PREFERRED_BUFFER + VEHICLE_LENGTH + 2 //meters. 
 //#define BACK_SCAN_RADIUS     2*VEHICLE_LENGTH //meters. 
-#define BACK_SCAN_RADIUS     50 //meters. 
+#define BACK_SCAN_RADIUS     20 //meters. 
 
 /******* BELOW UNUSED *******/
 /** PTG Constants **/

@@ -153,8 +153,8 @@ int main(int argc, char** argv) {
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     auto sdata = string(data).substr(0, length);
-    cout << sdata << endl;
-
+    //cout << sdata << endl;
+    
     if (length && length > 2 && data[0] == '4' && data[1] == '2') {
       
       auto s = hasData(data);
@@ -175,7 +175,7 @@ int main(int argc, char** argv) {
 	  }
 	  **/
 	  
-	  DEBUG(" ****** ITER %ul " << debug_loop++ << " ******");
+	  cout << " ****** ITER " << debug_loop++ << endl;
 	  DEBUG(" ****** Previous cycle time = " << previous_cycle_time << " msecs");
 
 	  // Main car's localization Data

@@ -15,7 +15,7 @@ namespace plt = matplotlibcpp;
 using namespace std;
 
 
-bool debugging_enabled   = true;
+bool debugging_enabled   = false;
 bool debugging_enabled_f = false;
 bool debugging_enabled_t = false;
 
